@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
 import ForgeReconciler, {
   Button,
+  Link,
   DatePicker,
   Form,
   FormFooter,
   Label,
   Select,
   Text,
-  TextField,
+  Textfield,
   useForm,
   useProductContext,
 } from '@forge/react';
-import { invoke, view } from '@forge/bridge';
+import { invoke, router } from '@forge/bridge';
 
 const TEMPLATE_OPTIONS = [
   { label: 'Meeting notes', value: 'meeting-notes' },
@@ -24,17 +25,25 @@ const App = () => {
   const { handleSubmit, register, getFieldId } = useForm();
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(null);
 
   const onSubmit = async (data) => {
     setBusy(true);
     setError(null);
     try {
-      await invoke('createPage', {
+      const page = await invoke('createPage', {
         templateKey: data.template?.value,
         values: { title: data.title, owner: data.owner, date: data.date },
       });
-      // Close the modal and reload the host page so the new child shows up.
-      await view.close({ reload: true });
+      setDone(page);
+      // A content action modal cannot close itself (view.close is not allowed
+      // for this module), so jump to the new page instead; if navigation is
+      // refused, the success message below carries the link.
+      try {
+        await router.navigate(page.url);
+      } catch (_) {
+        setBusy(false);
+      }
     } catch (e) {
       setError(e.message || String(e));
       setBusy(false);
@@ -42,6 +51,13 @@ const App = () => {
   };
 
   if (!context) return <Text>Loading...</Text>;
+  if (done) {
+    return (
+      <Text>
+        Page created: <Link href={done.url}>{done.title}</Link>. Close this dialog to continue.
+      </Text>
+    );
+  }
 
   return (
     <Form onSubmit={handleSubmit(onSubmit)}>
@@ -52,16 +68,13 @@ const App = () => {
         placeholder="Choose a template"
       />
       <Label labelFor={getFieldId('title')}>Title</Label>
-      <TextField {...register('title', { required: true })} />
+      <Textfield {...register('title', { required: true })} />
       <Label labelFor={getFieldId('owner')}>Owner</Label>
-      <TextField {...register('owner', { required: true })} />
+      <Textfield {...register('owner', { required: true })} />
       <Label labelFor={getFieldId('date')}>Date</Label>
       <DatePicker {...register('date', { required: true })} />
       {error && <Text>Error: {error}</Text>}
       <FormFooter>
-        <Button appearance="subtle" onClick={() => view.close()}>
-          Cancel
-        </Button>
         <Button appearance="primary" type="submit" isDisabled={busy}>
           {busy ? 'Creating...' : 'Create page'}
         </Button>

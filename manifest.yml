@@ -15,6 +15,7 @@ modules:
       resolver:
         function: resolver
       render: native
+      config: true
   function:
     - key: resolver
       handler: index.handler
@@ -31,6 +32,6 @@ permissions:
     - write:label:confluence
     - search:confluence
 app:
-  id: ari:cloud:ecosystem::app/<replace-after-forge-register>
+  id: ari:cloud:ecosystem::app/e3852008-2afb-4d18-9b6b-a3567f61d4ff
   runtime:
     name: nodejs22.x

@@ -13,7 +13,7 @@ If you own a P2 plugin for Confluence DC, the Cloud path is Forge. This repo is 
 ## What the app does
 
 1. **Content action** "Create page from template" (`confluence:contentAction`). Opens a UI Kit 2 modal. The user picks a bundled template (Meeting notes, Decision record, Runbook), fills in title, owner and date, and the app creates a **child page** of the current page through the Confluence REST API v2.
-2. **Macro** "Template pages index" (`macro`). Renders a UI Kit 2 `DynamicTable` of the child pages created by the app, found through the label `template-page` that the app adds on creation.
+2. **Macro** "Template pages index" (`macro`, with `config: true`). Renders a UI Kit 2 `DynamicTable` of the pages created by the app, found through the label `template-page` that the app adds on creation. The macro configuration (`useConfig`) offers two sources: **direct children** read from the content store (instant, one REST call) or **all descendants** through a CQL search (deeper, but the search index can lag minutes behind page creation). Keeping both shows the trade-off a real migration hits: P2 plugins often queried the database directly; on Cloud you choose between the content API and the search index.
 
 ```
  Page menu: "Create page from template"
@@ -29,7 +29,7 @@ If you own a P2 plugin for Confluence DC, the Cloud path is Forge. This repo is 
                                                new child page, label "template-page"
 
  Macro "Template pages index" --invoke('listTemplatePages')--> [resolver]
-   DynamicTable                                       GET /wiki/rest/api/search?cql=label=...
+   DynamicTable                                       v2 children+labels  |  v1 search?cql=... (macro config)
 ```
 
 Everything runs as the current user (`api.asUser()`), so Confluence's own page permissions apply.
@@ -66,11 +66,11 @@ Requires Node.js 22 and an Atlassian Cloud site with Confluence where you can in
 ```bash
 npm install
 npm i -g @forge/cli
-forge login
-forge register            # replaces the placeholder app.id in manifest.yml
+forge login               # or export FORGE_EMAIL / FORGE_API_TOKEN for non-interactive use
+forge register "Template Pages" -y   # first run also creates your Developer Space; replaces app.id in manifest.yml
 npm run lint              # forge lint
-forge deploy
-forge install --site your-site.atlassian.net --product confluence
+forge deploy -e development --non-interactive
+forge install --site your-site.atlassian.net --product confluence -e development --non-interactive --confirm-scopes
 ```
 
 After a scope change in the manifest, run `forge install --upgrade` and approve the new permissions. During development `forge tunnel` gives you live reload.
@@ -80,18 +80,33 @@ After a scope change in the manifest, run `forge install --upgrade` and approve 
 1. Open any Confluence page.
 2. Open the page's "more actions" menu and choose **Create page from template**.
 3. Pick "Decision record", fill in the fields and submit. The page reloads and the new child page appears in the page tree.
-4. Edit the parent page, type `/Template pages index` and insert the macro. It lists the child pages carrying the `template-page` label.
+4. Edit the parent page, type `/Template pages index` and insert the macro. Its configuration panel lets you pick direct children or all descendants (CQL). It lists the pages carrying the `template-page` label.
 
 ## Limitations
 
 - Templates are bundled in the app; users cannot add or edit their own.
 - No template versioning: changing a template only affects pages created afterwards.
-- Only direct and indirect descendants of the page holding the macro are listed.
+- Only pages below the one holding the macro are listed (direct children, or all descendants in CQL mode).
 - Labelling uses the v1 content API because v2 has no endpoint for adding labels at the time of writing.
-- The scope list is a starting point: check it against the current REST docs and the warnings from `forge lint` / `forge deploy` for your site.
+- The scope list above passed `forge lint` and `forge deploy` on Forge CLI 14.2 (October 2026); re-check it against the current REST docs when you add endpoints.
 - UI strings are English only.
 
-## Migration notes: gotchas from DC to Forge
+## Screenshots
+
+Running on a Confluence Cloud development site.
+
+| | |
+|---|---|
+| ![Content action in the page menu](docs/screenshots/01-content-action-menu.png) | ![Create page from template modal](docs/screenshots/02-create-modal.png) |
+| The action under the page's **···** → **Apps** menu | The UI Kit 2 modal: template, title, owner, date |
+| ![Created page](docs/screenshots/03-created-page.png) | ![Index macro in both modes](docs/screenshots/04-index-macro-both-modes.png) |
+| The child page rendered from the Meeting notes template, labelled `template-page` | The index macro inserted twice: CQL search over all descendants, and direct children |
+
+## Migration notes
+
+- **Classic vs granular scopes.** The v1 content endpoints (`/wiki/rest/api/content/...`) want the classic `read:confluence-content.*` scopes; an app declared with granular v2 scopes (`read:page:confluence`) gets `401 scope does not match` on them. Stay on `/wiki/api/v2/` wherever it covers the need (here: children, labels, bulk pages), and keep v1 only for what v2 lacks (CQL search, adding a label).
+
+- **`asUser()` vs `asApp()`.** The content action uses `asUser()` so the new page has the real author and respects the user's permissions; the macro uses `asApp()` because it renders for every reader and `asUser()` would ask each of them to grant consent. After a scope change, users must re-consent, which is visible as an "Allow access" prompt.: gotchas from DC to Forge
 
 1. **No server-side Java.** Backend logic becomes JavaScript functions (Node.js runtime). Anything that depended on in-process Java APIs (`PageManager`, `SpaceManager`, event listeners) turns into REST calls or Forge product events and triggers.
 2. **Function time limits.** Resolvers have a hard timeout (25 seconds by default). Long jobs, such as bulk page creation, need the async events queue (`@forge/events`) or a scheduled trigger instead of a long-running request.
