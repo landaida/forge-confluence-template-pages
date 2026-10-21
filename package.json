@@ -1,0 +1,20 @@
+{
+  "name": "forge-confluence-template-pages",
+  "version": "0.1.0",
+  "description": "Forge app for Confluence Cloud: create child pages from bundled templates (the Forge take on a P2 blueprint).",
+  "private": true,
+  "license": "MIT",
+  "main": "src/index.js",
+  "scripts": {
+    "lint": "forge lint",
+    "deploy": "forge deploy",
+    "install:site": "forge install"
+  },
+  "dependencies": {
+    "@forge/api": "8.3.0",
+    "@forge/bridge": "7.2.0",
+    "@forge/react": "12.3.1",
+    "@forge/resolver": "2.0.1",
+    "react": "^18.2.0"
+  }
+}
